@@ -1,0 +1,136 @@
+mql5
+#property copyright 'Forex Robot Easy Team'
+#property link 'forexroboteasy.com'
+
+// Include necessary libraries
+#include <Trade\Trade.mqh>
+#include <ChartObjects\ChartObjectsTxt.mqh>
+#include <ChartObjects\ChartObjectsLabels.mqh>
+
+// Define constants
+#define MAX_SYMBOLS 10
+#define MAX_PARAMETERS 3
+
+// Define global variables
+CTrade trade;
+string symbols[MAX_SYMBOLS] = {'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'USDCAD', 'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY'};
+double parameters[MAX_PARAMETERS] = {1.5, 10000, 30};
+int totalSymbols = ArraySize(symbols);
+int totalParameters = ArraySize(parameters);
+
+// Initialize chart objects
+CChartObjectText symbolText[MAX_SYMBOLS];
+CChartObjectLabel parameterLabel[MAX_PARAMETERS];
+
+// Initialize file variables
+string fileName = 'CompareSymbolsData.csv';
+int fileHandle;
+
+// Initialize alert variables
+bool showAlerts = true;
+bool alertTriggered = false;
+datetime lastAlertTime;
+
+// Compare symbols function
+void CompareSymbols()
+{
+   // Clear chart objects
+   for (int i = 0; i < totalSymbols; i++)
+   {
+      symbolText[i].Delete();
+   }
+
+   // Clear file
+   fileHandle = FileOpen(fileName, FILE_CSV|FILE_WRITE|FILE_READ, ',');
+   FileDelete(fileName);
+   FileClose(fileHandle);
+
+   // Compare symbols
+   for (int i = 0; i < totalSymbols; i++)
+   {
+      double currentValue = SymbolInfoDouble(symbols[i], SYMBOL_BID);
+      double previousValue = SymbolInfoDouble(symbols[i], SYMBOL_CLOSE);
+
+      // Display symbol data on chart
+      symbolText[i].Create(0, symbols[i], 0, TimeCurrent(), currentValue);
+      symbolText[i].Color(SymbolInfoInteger(symbols[i], SYMBOL_COLOR));
+
+      // Save symbol data to file
+      fileHandle = FileOpen(fileName, FILE_CSV|FILE_WRITE|FILE_READ, ',');
+      FileSeek(fileHandle, 0, SEEK_END);
+      FileWrite(fileHandle, TimeToString(TimeCurrent(), TIME_DATE|TIME_MINUTES), symbols[i], DoubleToString(currentValue, _Digits), DoubleToString(previousValue, _Digits));
+      FileClose(fileHandle);
+
+      // Check symbol parameters
+      for (int j = 0; j < totalParameters; j++)
+      {
+         if (currentValue > parameters[j] && !alertTriggered)
+         {
+            // Trigger alert
+            if (showAlerts && TimeCurrent() - lastAlertTime > 60)
+            {
+               Alert('Symbol ', symbols[i], ' is above parameter ', DoubleToString(parameters[j], _Digits));
+               lastAlertTime = TimeCurrent();
+               alertTriggered = true;
+            }
+
+            // Display parameter label on chart
+            parameterLabel[j].Create(0, 'Parameter ' + DoubleToString(parameters[j], _Digits) + ' triggered', 0, TimeCurrent(), currentValue);
+            parameterLabel[j].Color(clrRed);
+         }
+      }
+   }
+}
+
+// OnInit event
+void OnInit()
+{
+   // Initialize trade
+   trade.SetExpertMagicNumber(123456);
+
+   // Initialize chart objects
+   ChartObjectsTotal();
+   ChartObjectsDeleteAll();
+   for (int i = 0; i < totalSymbols; i++)
+   {
+      symbolText[i].Font('Arial', 10);
+      symbolText[i].Corner = CORNER_RIGHT_UPPER;
+   }
+   for (int i = 0; i < totalParameters; i++)
+   {
+      parameterLabel[i].Font('Arial', 10);
+      parameterLabel[i].Corner = CORNER_RIGHT_LOWER;
+   }
+
+   // Initialize file
+   fileHandle = FileOpen(fileName, FILE_CSV|FILE_WRITE|FILE_READ, ',');
+   if (fileHandle == INVALID_HANDLE)
+   {
+      FileCreate(fileName, FILE_CSV|FILE_WRITE, ',');
+      FileClose(fileHandle);
+   }
+
+   // Set up alerts
+   if (showAlerts)
+   {
+      Alert('Symbol comparison started.');
+      lastAlertTime = TimeCurrent();
+   }
+}
+
+// OnTick event
+void OnTick()
+{
+   // Compare symbols
+   CompareSymbols();
+}
+
+// OnDeinit event
+void OnDeinit(const int reason)
+{
+   // Set up alerts
+   if (showAlerts)
+   {
+      Alert('Symbol comparison stopped.');
+   }
+}
